@@ -1,0 +1,25 @@
+name: terraform-ci
+on:
+  pull_request:
+    paths: ['envs/dev/**', '.github/workflows/ci.yml']
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+      - run: terraform fmt -check
+        working-directory: envs/dev
+      - run: terraform init -backend=false
+        working-directory: envs/dev
+      - run: terraform validate
+        working-directory: envs/dev
+      - uses: terraform-linters/setup-tflint@v4
+      - run: tflint --init && tflint
+        working-directory: envs/dev
+      - uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: envs/dev
+          soft_fail: true
