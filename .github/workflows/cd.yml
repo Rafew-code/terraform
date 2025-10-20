@@ -1,0 +1,52 @@
+
+name: cd
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPO: 865377811508.dkr.ecr.us-east-1.amazonaws.com/foo-api
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # kept for future OIDC swap
+      contents: read
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: configure aws credentials (keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: login to ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: build & tag image
+        run: |
+          docker build -t ${{ env.ECR_REPO }}:${{ github.sha }} ./app
+          docker tag ${{ env.ECR_REPO }}:${{ github.sha }} ${{ env.ECR_REPO }}:latest
+
+      - name: push image
+        run: |
+          docker push ${{ env.ECR_REPO }}:${{ github.sha }}
+          docker push ${{ env.ECR_REPO }}:latest
+
+      - name: setup terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: terraform init & apply
+        working-directory: envs/dev
+        run: |
+          terraform init
+          terraform apply -auto-approve -var="image_uri=${{ env.ECR_REPO }}:${{ github.sha }}"
